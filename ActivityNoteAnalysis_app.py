@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.express as px
 
 st.set_page_config(page_title="Activity Log", layout="wide")
-st.title("활동일지")
+st.title("활동일지 분석")
 
 # 파일 업로드 위젯
 uploaded_file = st.file_uploader("파일 업로드 (xlsx 또는 csv 형식)", type=['xlsx', 'csv'])
@@ -14,7 +14,7 @@ if uploaded_file:
         if uploaded_file.name.endswith('.xlsx'):
             df = pd.read_excel(uploaded_file, dtype=str, engine='openpyxl')
         elif uploaded_file.name.endswith('.csv'):
-            df = pd.read_csv(uploaded_file, dtype=str)
+            df = pd.read_csv(uploaded_file, dtype=str, encoding='euc-kr')
 
         # 특정 컬럼의 데이터 타입을 변경
         df["활동직원수"] = df["활동직원수"].astype(int)
