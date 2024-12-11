@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import io
 
 # 파일 처리를 위한 캐싱 데코레이터
 @st.cache_data
@@ -25,19 +26,15 @@ def clean_price_column(df, column_names:list):
 
     for column_name in column_names:
         # 1. Null 값을 "0"으로 채우기
-        df[column_name] = df[column_name].fillna("0")
-        
+        df[column_name] = df[column_name].fillna("0")        
         # 2. 천 단위 구분 기호 ",", " "를 모두 제거
-        df[column_name] = df[column_name].str.replace(",", "").str.replace(" ", "")
-        
+        df[column_name] = df[column_name].str.replace(",", "").str.replace(" ", "")        
         # 3. 숫자가 아닌 값을 "0"으로 교체
-        df[column_name] = df[column_name].apply(lambda x: x if x.isnumeric() else "0")
-        
+        df[column_name] = df[column_name].apply(lambda x: x if x.isnumeric() else "0")        
         # 4. "Price" 컬럼을 int 형으로 변환
         df[column_name] = df[column_name].astype(int)
     
     return df
-
 
 # 그래프 슬라이더 생성 함수
 def create_graph_sliders(show=["threshold", "width", "height"], threshold_label="활동건수 기준값", threshold_max=300, 
@@ -57,6 +54,15 @@ def create_graph_sliders(show=["threshold", "width", "height"], threshold_label=
         with col_sub3:
             height = st.slider(height_label, 300, 900, 600, key=height_key)
         return threshold, width, height
+    
+# streamlit 에서 excel 파일 다운로드 위한 함수
+def to_excel(df):
+    output = io.BytesIO()
+    writer = pd.ExcelWriter(output, engine='openpyxl')
+    df.to_excel(writer, index=False, sheet_name='Sheet1')
+    writer.close()
+    processed = output.getvalue()
+    return processed
 
 # Streamlit 앱 설정
 st.set_page_config(page_title="활동 로그 분석", layout="wide")
@@ -110,10 +116,10 @@ if uploaded_file:
             
             edited_df = st.data_editor(st.session_state['new_df'])
 
-            col1, col2, _ = st.columns([0.15, 0.1, 1])
+            col1, col2, col3, _ = st.columns([0.15, 0.1, 0.1, 0.65])
 
             with col1:
-                if st.button("✅ 수정 데이터 저장"):
+                if st.button("✅ 변경데이터 적용"):
                     st.session_state['new_df'] = edited_df
                     st.success("데이터프레임 업데이트 완료!")
             
@@ -121,10 +127,18 @@ if uploaded_file:
                 timestamp = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
                 csv = st.session_state['new_df'].to_csv(index=False)
                 st.download_button(
-                    label="💾 다운로드", 
+                    label="💾 다운로드(csv)", 
                     data=csv, 
                     file_name=f"activityLog_{timestamp}.csv", 
                     mime="text/csv"
+                )
+            with col3:
+                xlsx = st.session_state['new_df']
+                st.download_button(
+                    label="💾 다운로드(xlsx)", 
+                    data=to_excel(xlsx), 
+                    file_name=f"activityLog_{timestamp}.xlsx", 
+                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
                 )
 
             st.divider()
@@ -132,6 +146,7 @@ if uploaded_file:
             member_grade = st.session_state['new_df']["활동직급"].unique().tolist()
             member_grade.sort()
             member_grade.insert(0, "전체")
+
 
             # 직원별 활동건수 그래프
             st.markdown("<h3>1) 직원별 활동건수 그래프</h3>", unsafe_allow_html=True)
@@ -256,6 +271,37 @@ if uploaded_file:
                     showlegend=True
                 )
                 st.plotly_chart(fig4, use_container_width=False)
+
+            # 직원별 완료금액 그래프
+            st.markdown("<h3>4) 직원별 완료금액 그래프</h3>", unsafe_allow_html=True)
+            income_df = st.session_state['new_df'][st.session_state['new_df']["COS 연계정보(완료금액)"]>0]
+            member_income_dup = income_df[["활동직급","활동직원", "COS 연계정보(완료금액)", "사업명"]].groupby(["활동직급","활동직원"]).agg(list)
+            member_income_uniq = member_income_dup.applymap(lambda x: x[0])
+            member_income_stat = member_income_uniq.groupby(["활동직급", "활동직원"]).sum().reset_index()
+            st.dataframe(member_income_stat)
+
+            with st.expander("직원별 완료금액 그래프"):
+                _, width5, height5 = create_graph_sliders(
+                    show=["width", "height"],
+                    width_key='width5',
+                    height_key='height5'
+                )
+
+                fig5 = px.bar(member_income_stat, 
+                            x="활동직원", 
+                            y="COS 연계정보(완료금액)", 
+                            title=None, 
+                            template="gridon", 
+                            color='활동직원')
+                
+                fig5.update_layout(
+                    width=width4, 
+                    height=height4,
+                    xaxis=dict(tickfont=dict(size=9), tickangle=90),
+                    showlegend=True
+                )
+                st.plotly_chart(fig5, use_container_width=False)
+
 
     except Exception as e:
         st.error(f"파일 처리 중 오류 발생: {e}")
