@@ -20,6 +20,25 @@ def get_color_sequence(data, top_n=3, base_column="활동건수", top_color='ora
     return [top_color if i in data.nlargest(top_n, base_column).index else default_color 
             for i in data.index]
 
+# 금액관련 컬럼 정제 함수
+def clean_price_column(df, column_names:list):
+
+    for column_name in column_names:
+        # 1. Null 값을 "0"으로 채우기
+        df[column_name] = df[column_name].fillna("0")
+        
+        # 2. 천 단위 구분 기호 ",", " "를 모두 제거
+        df[column_name] = df[column_name].str.replace(",", "").str.replace(" ", "")
+        
+        # 3. 숫자가 아닌 값을 "0"으로 교체
+        df[column_name] = df[column_name].apply(lambda x: x if x.isnumber() else "0")
+        
+        # 4. "Price" 컬럼을 int 형으로 변환
+        df[column_name] = df[column_name].astype(int)
+    
+    return df
+
+
 # 그래프 슬라이더 생성 함수
 def create_graph_sliders(show=["threshold", "width", "height"], threshold_label="활동건수 기준값", threshold_max=300, 
                           width_label="그래프 너비", height_label="그래프 높이",
@@ -30,8 +49,7 @@ def create_graph_sliders(show=["threshold", "width", "height"], threshold_label=
     threshold, width, height = 0, 800, 600
     if "threshold" in show:
         with col_sub1:
-            threshold = st.slider(threshold_label, 0, threshold_max, 0, key=threshold_key)
-        
+            threshold = st.slider(threshold_label, 0, threshold_max, 0, key=threshold_key)        
     if "width" in show:
         with col_sub2:
             width = st.slider(width_label, 400, 1200, 800, key=width_key)
@@ -80,6 +98,7 @@ if uploaded_file:
         if st.button("🔄 활동직원별 데이터 재생성"):
             # 데이터프레임 처리
             new_df = process_dataframe(df)
+            new_df = clean_price_column(new_df, ["COS 연계정보(완료금액)"]) 
             st.session_state['new_df'] = new_df
 
         if 'new_df' in st.session_state:
