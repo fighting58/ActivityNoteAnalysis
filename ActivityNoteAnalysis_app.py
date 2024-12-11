@@ -37,16 +37,19 @@ def clean_price_column(df, column_names:list):
     return df
 
 # 그래프 슬라이더 생성 함수
-def create_graph_sliders(show=["threshold", "width", "height"], threshold_label="활동건수 기준값", threshold_max=300, 
-                          width_label="그래프 너비", height_label="그래프 높이",
-                          threshold_key='activity_threshold', 
-                          width_key='width', 
-                          height_key='height'):
+def create_graph_sliders(show=["threshold", "width", "height"], threshold_label="활동건수 기준값", 
+                         threshold_max=300, 
+                         threshold_step=1,
+                         threshold_key='activity_threshold', 
+                         width_label="그래프 너비", 
+                         width_key='width', 
+                         height_label="그래프 높이",
+                         height_key='height'):
     col_sub1, col_sub2, col_sub3 = st.columns(3)
     threshold, width, height = 0, 800, 600
     if "threshold" in show:
         with col_sub1:
-            threshold = st.slider(threshold_label, 0, threshold_max, 0, key=threshold_key)        
+            threshold = st.slider(threshold_label, 0, threshold_max, 0, key=threshold_key, step=threshold_step)        
     if "width" in show:
         with col_sub2:
             width = st.slider(width_label, 400, 1200, 800, key=width_key)
@@ -54,6 +57,12 @@ def create_graph_sliders(show=["threshold", "width", "height"], threshold_label=
         with col_sub3:
             height = st.slider(height_label, 300, 900, 600, key=height_key)
         return threshold, width, height
+
+# csv 다운로드 버튼
+def csv_download(label, df, file_name):
+    timestamp = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
+    data = df.copy().to_csv(index=False).encode('euc-kr')
+    st.download_button(label=label, data=data, file_name=f'{file_name}_{timestamp}.csv', mime='text/css')
     
 # streamlit 에서 excel 파일 다운로드 위한 함수
 def to_excel(df):
@@ -148,7 +157,7 @@ if uploaded_file:
             member_grade.insert(0, "전체")
 
 
-            # 직원별 활동건수 그래프
+            ################   직원별 활동건수 그래프  ######################################
             st.markdown("<h3>1) 직원별 활동건수 그래프</h3>", unsafe_allow_html=True)
             member_activity_stat = st.session_state['new_df'][["활동직급", "활동직원", "활동직원수"]].groupby(["활동직급", "활동직원"]).sum().reset_index()
             with st.expander("직원별 활동건수 그래프"):
@@ -168,10 +177,13 @@ if uploaded_file:
                     filtered_grade_member_activity_stat = filtered_member_activity_stat
                 else:
                     filtered_grade_member_activity_stat = filtered_member_activity_stat[filtered_member_activity_stat["활동직급"] == grade]
-                
-                colors = get_color_sequence(filtered_grade_member_activity_stat)
 
-                fig1 = px.bar(filtered_grade_member_activity_stat, x="활동직원", y="활동건수", 
+                filtered_grade_member_activity_stat = filtered_grade_member_activity_stat.sort_values(by="활동건수", ascending=False)
+                colors = get_color_sequence(filtered_grade_member_activity_stat, top_n=10)
+
+                fig1 = px.bar(filtered_grade_member_activity_stat, 
+                            x="활동직원", 
+                            y="활동건수", 
                             title=None, template="gridon", 
                             color="활동직원",
                             color_discrete_sequence=colors)
@@ -183,8 +195,9 @@ if uploaded_file:
                 )
                 fig1.update_traces(hovertemplate='활동직원: %{x}<br>활동건수: %{y}<extra></extra>')
                 st.plotly_chart(fig1, use_container_width=False)
+                
+                csv_download(label="💾 관련자료 다운로드(csv)", df=member_activity_stat, file_name="직원별활동건수")
 
-  
             # 지사별 활동건수 그래프
             st.markdown("<h3>2) 지사별 활동건수 그래프</h3>", unsafe_allow_html=True)
             jisa_activity_stat = st.session_state['new_df'][["소속", "활동직원수"]].groupby("소속").sum().reset_index()
@@ -213,6 +226,8 @@ if uploaded_file:
                 )
                 fig2.update_traces(hovertemplate='지사: %{x}<br>활동건수: %{y}<extra></extra>')
                 st.plotly_chart(fig2, use_container_width=False)
+
+                csv_download(label="💾 관련자료 다운로드(csv)", df=jisa_activity_stat, file_name="지사별활동건수")
 
 
             # 사업분류별 활동건수 그래프
@@ -244,6 +259,8 @@ if uploaded_file:
                 )
                 st.plotly_chart(fig3, use_container_width=False)
 
+                csv_download(label="💾 관련자료 다운로드(csv)", df=business_class_stat, file_name="사업분류별활동건수")
+
 
             # 지사별 활동사업 그래프
             st.markdown("<h3>4) 지사별 활동사업 그래프</h3>", unsafe_allow_html=True)
@@ -272,35 +289,86 @@ if uploaded_file:
                 )
                 st.plotly_chart(fig4, use_container_width=False)
 
+                csv_download(label="💾 관련자료 다운로드(csv)", df=jisa_business_stat, file_name="지사별활동사업")
+
+
             # 직원별 완료금액 그래프
-            st.markdown("<h3>4) 직원별 완료금액 그래프</h3>", unsafe_allow_html=True)
+            st.markdown("<h3>5) 직원별 완료금액 그래프</h3>", unsafe_allow_html=True)
             income_df = st.session_state['new_df'][st.session_state['new_df']["COS 연계정보(완료금액)"]>0]
-            member_income_dup = income_df[["활동직급","활동직원", "COS 연계정보(완료금액)", "사업명"]].groupby(["활동직급","활동직원"]).agg(list)
-            member_income_uniq = member_income_dup.applymap(lambda x: x[0])
-            member_income_stat = member_income_uniq.groupby(["활동직급", "활동직원"]).sum().reset_index()
-            st.dataframe(member_income_stat)
+            member_income_dup = income_df[["활동직급","활동직원", "COS 연계정보(완료금액)", "사업명"]].groupby(["활동직급","활동직원","사업명"]).agg(list)
+            member_income_uniq = member_income_dup.map(lambda x: x[0])
+            member_income_stat = member_income_uniq.groupby(["활동직급", "활동직원"]).sum()
+            member_income_stat_sort = member_income_stat.sort_values(by="COS 연계정보(완료금액)", ascending=False).reset_index()
 
             with st.expander("직원별 완료금액 그래프"):
-                _, width5, height5 = create_graph_sliders(
-                    show=["width", "height"],
+                threshold5, width5, height5 = create_graph_sliders(
+                    threshold_label="금액 기준값", 
+                    threshold_step= 10000000,
+                    threshold_max=900000000,
+                    threshold_key='activity_threshold5',
                     width_key='width5',
                     height_key='height5'
                 )
 
-                fig5 = px.bar(member_income_stat, 
+                filtered_member_income_stat_sort = member_income_stat_sort[member_income_stat_sort["COS 연계정보(완료금액)"] >= threshold5]
+                colors5 = get_color_sequence(filtered_member_income_stat_sort, top_n=10, base_column="COS 연계정보(완료금액)")
+
+                fig5 = px.bar(filtered_member_income_stat_sort, 
                             x="활동직원", 
                             y="COS 연계정보(완료금액)", 
                             title=None, 
-                            template="gridon", 
-                            color='활동직원')
+                            template="gridon",
+                            color="활동직원",
+                            color_discrete_sequence=colors5
+                            )
                 
                 fig5.update_layout(
-                    width=width4, 
-                    height=height4,
+                    width=width5, 
+                    height=height5,
                     xaxis=dict(tickfont=dict(size=9), tickangle=90),
-                    showlegend=True
+                    showlegend=False
                 )
                 st.plotly_chart(fig5, use_container_width=False)
+
+                csv_download(label="💾 관련자료 다운로드(csv)", df=member_income_stat_sort, file_name="직원별완료금액")
+
+
+            # 직원별 기관수 그래프
+            st.markdown("<h3>6) 직원별 기관수 그래프</h3>", unsafe_allow_html=True)
+            member_org_dup = st.session_state['new_df'][["활동직급", "활동직원", "기관명"]]
+            member_org_df = member_org_dup.groupby(["활동직급", "활동직원"]).agg(set)
+            member_org_df["기관수"]= member_org_df.map(lambda x: len(x))
+            member_org_df_sort = member_org_df.sort_values(by="기관수", ascending=False).reset_index()
+
+            with st.expander("직원별 기관수 그래프"):
+                threshold6, width6, height6 = create_graph_sliders(
+                    threshold_label="기관수 기준값", 
+                    threshold_max=20,
+                    threshold_key='activity_threshold6',
+                    width_key='width6',
+                    height_key='height6'
+                )
+                filtered_member_org_df_sort = member_org_df_sort[member_org_df_sort["기관수"] >= threshold6]
+                colors6 = get_color_sequence(filtered_member_org_df_sort, top_n=10, base_column="기관수")
+
+                fig6 = px.bar(filtered_member_org_df_sort, 
+                            x="활동직원", 
+                            y="기관수", 
+                            title=None, 
+                            template="gridon",
+                            color="활동직원",
+                            color_discrete_sequence=colors6
+                            )
+                
+                fig6.update_layout(
+                    width=width6, 
+                    height=height6,
+                    xaxis=dict(tickfont=dict(size=9), tickangle=90),
+                    showlegend=False
+                )
+                st.plotly_chart(fig6, use_container_width=False)
+
+                csv_download(label="💾 관련자료 다운로드(csv)", df=member_org_df_sort, file_name="직원별기관수")
 
 
     except Exception as e:
