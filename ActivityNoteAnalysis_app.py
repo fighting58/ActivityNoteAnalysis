@@ -72,12 +72,12 @@ if uploaded_file:
             if uploaded_file.name.endswith('.xlsx'):
                 df = pd.read_excel(uploaded_file, dtype=str, engine='openpyxl')
             elif uploaded_file.name.endswith('.csv'):
-                df = pd.read_csv(uploaded_file, dtype=str, encoding='euc-kr')
+                df = pd.read_csv(uploaded_file, dtype=str)
         except pd.errors.EmptyDataError:
             st.error("업로드된 파일이 비어 있습니다.")
             st.stop()
         except UnicodeDecodeError:
-            st.error("파일 인코딩을 확인해주세요. CSV 파일은 'euc-kr' 인코딩을 사용해야 합니다.")
+            st.error("파일 인코딩을 확인해주세요.")
             st.stop()
 
         # 데이터 유효성 검사
@@ -119,7 +119,7 @@ if uploaded_file:
             
             with col2:
                 timestamp = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
-                csv = st.session_state['new_df'].to_csv(index=False).encode('euc-kr')
+                csv = st.session_state['new_df'].to_csv(index=False)
                 st.download_button(
                     label="💾 다운로드", 
                     data=csv, 
@@ -129,9 +129,13 @@ if uploaded_file:
 
             st.divider()
             jisa_order = st.session_state['new_df']["소속"].unique().tolist()
+            member_grade = st.session_state['new_df']["활동직급"].unique().tolist()
+            member_grade.sort()
+            member_grade.insert(0, "전체")
 
+            # 직원별 활동건수 그래프
             st.markdown("<h3>1) 직원별 활동건수 그래프</h3>", unsafe_allow_html=True)
-            member_activity_stat = st.session_state['new_df'][["활동직원", "활동직원수"]].groupby("활동직원").sum().reset_index()
+            member_activity_stat = st.session_state['new_df'][["활동직급", "활동직원", "활동직원수"]].groupby(["활동직급", "활동직원"]).sum().reset_index()
             with st.expander("직원별 활동건수 그래프"):
                 activity_threshold, width, height = create_graph_sliders(
                     threshold_label="활동건수 기준값", 
@@ -143,13 +147,20 @@ if uploaded_file:
 
                 member_activity_stat.rename(columns={"활동직원수": "활동건수"}, inplace=True)
                 filtered_member_activity_stat = member_activity_stat[member_activity_stat["활동건수"] >= activity_threshold]
-                
-                colors = get_color_sequence(filtered_member_activity_stat)
 
-                fig1 = px.bar(filtered_member_activity_stat, x="활동직원", y="활동건수", 
+                grade = st.selectbox("직급 선택", member_grade, key="member_grade")
+                if grade == "전체":
+                    filtered_grade_member_activity_stat = filtered_member_activity_stat
+                else:
+                    filtered_grade_member_activity_stat = filtered_member_activity_stat[filtered_member_activity_stat["활동직급"] == grade]
+                
+                colors = get_color_sequence(filtered_grade_member_activity_stat)
+
+                fig1 = px.bar(filtered_grade_member_activity_stat, x="활동직원", y="활동건수", 
                             title=None, template="gridon", 
                             color="활동직원",
                             color_discrete_sequence=colors)
+                
                 fig1.update_layout(
                     width=width, height=height,
                     xaxis=dict(tickfont=dict(size=9), tickangle=90),
