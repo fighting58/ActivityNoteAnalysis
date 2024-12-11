@@ -31,7 +31,7 @@ def clean_price_column(df, column_names:list):
         df[column_name] = df[column_name].str.replace(",", "").str.replace(" ", "")
         
         # 3. 숫자가 아닌 값을 "0"으로 교체
-        df[column_name] = df[column_name].apply(lambda x: x if x.isnumber() else "0")
+        df[column_name] = df[column_name].apply(lambda x: x if x.isnumeric() else "0")
         
         # 4. "Price" 컬럼을 int 형으로 변환
         df[column_name] = df[column_name].astype(int)
